@@ -17,10 +17,10 @@ from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton, QFileDialog, QVBoxLayout, QHBoxLayout,
                                QDialog, QInputDialog)
 from core.custom_ui import IconHoverFilter, ContextPopup, ShutdownDialog
-from core.dock_constants import DockConstants
-from core import dock_extension
-from core.dock_extension import DockExtensionWindow
-from core.dock_tooltip import DockTooltip
+from core.dock.dock_constants import DockConstants
+from core.dock import dock_extension
+from core.dock.dock_extension import DockExtensionWindow
+from core.dock.dock_tooltip import DockTooltip
 from core.fullscreen_watch import (
     DEFAULT_ENTER_CONFIRM,
     DEFAULT_EXIT_CONFIRM,
@@ -417,7 +417,7 @@ class DockApp(QMainWindow):
 
     def _build_extension_panel(self, extension):
         """把状态面板放进扩展窗口，并接好宽度联动。"""
-        from core.extension_panel import ExtensionPanel
+        from core.dock.extension_panel import ExtensionPanel
         from core.system_status import SystemStatusWorker
 
         self._status_worker = SystemStatusWorker()

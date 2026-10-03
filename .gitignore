@@ -6,6 +6,8 @@ log/
 杂物/
 notify_server/
 dist/
+build/
+*.spec
 MikaDesktop.egg-info/
 RinUI/
 acl-report/

@@ -246,7 +246,7 @@ check("sys32 暴露 AppBar 重注册所需的两个函数",
 
 # ---------------------------------------------------------------- 7) 配置与 dock 接线
 import core.config_manager as Config
-import dock as dock_module
+import app as dock_module
 
 fs_default = Config.DEFAULT_CONFIG.get("fullscreen", {})
 check("默认配置包含 fullscreen 段", isinstance(fs_default, dict) and bool(fs_default))

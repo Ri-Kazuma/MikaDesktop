@@ -23,8 +23,8 @@ from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QHBoxLayout, QPushButton, QSizePolicy, QWidget
 
-from . import system_status
-from .custom_ui import IconHoverFilter
+from .. import system_status
+from ..custom_ui import IconHoverFilter
 from .dock_constants import DockConstants
 from .dock_tooltip import DockTooltip
 

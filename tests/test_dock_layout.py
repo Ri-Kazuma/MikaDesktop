@@ -37,8 +37,8 @@ from PySide6.QtWidgets import QApplication, QMainWindow
 
 app = QApplication.instance() or QApplication(sys.argv)
 
-import dock as dock_module
-from core.dock_constants import DockConstants
+import app as dock_module
+from core.dock.dock_constants import DockConstants
 
 
 class FakeScreen:

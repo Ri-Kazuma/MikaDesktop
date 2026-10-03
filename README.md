@@ -164,12 +164,17 @@ python tests/manual_toast_render.py              # 离屏渲染一张示例通�
 <details>
 <summary>打包</summary>
 
-打包需要额外安装 `cx_Freeze`（不在 `requirements.txt` 里）：
+打包需要额外安装 `PyInstaller`（不在 `requirements.txt` 里）：
 
 ```bash
-pip install cx_Freeze
-python build.py build
+pip install pyinstaller
+python build.py build          # 发布版：主程序 + 看门狗 + 资源
+python build.py build --fast   # 快速构建：复用 build/ 中间结果，迭代用
+python build.py clean          # 清理 dist/ 与 build/
 ```
+
+产物在 `dist/MikaDesktop/`：`MikaDesktop.exe`（主程序）、`MikaWatchdog.exe`（任务栏看门狗）、
+`res/`（图标资源，与 exe 同级）、`_internal/`（依赖与内置数据文件）。
 
 </details>
 

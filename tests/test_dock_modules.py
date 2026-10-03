@@ -20,8 +20,8 @@ from PySide6.QtWidgets import QApplication, QPushButton
 app = QApplication.instance() or QApplication(sys.argv)
 
 # ---------- core.dock_constants ----------
-from core.dock_constants import DockConstants
-from core.dock_tooltip import DockTooltip
+from core.dock.dock_constants import DockConstants
+from core.dock.dock_tooltip import DockTooltip
 from core import pinned_apps
 from core.process_manager import ProcessManager
 from core.log_maker import logger as _logger_factory

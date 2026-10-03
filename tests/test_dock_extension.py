@@ -25,9 +25,9 @@ from PySide6.QtWidgets import QApplication
 
 app = QApplication.instance() or QApplication(sys.argv)
 
-from core import dock_extension
-from core.dock_constants import DockConstants
-from core.dock_extension import (
+from core.dock import dock_extension
+from core.dock.dock_constants import DockConstants
+from core.dock.dock_extension import (
     EXTENSION_GAP,
     EXTENSION_MAX_WIDTH,
     EXTENSION_MIN_WIDTH,
@@ -141,7 +141,7 @@ check("自定义间隙生效", gap_ext.left() == gap_dock.right() + 1 + 24)
 # 直接借用 DockApp 的真实方法（update_window_position / set_extension_width）
 # 在一个只准备所需属性的桩窗口上跑一遍：验证真正的接线，不碰 AppBar / 任务栏 /
 # 后台线程，也不需要显示窗口。
-import dock as dock_module
+import app as dock_module
 from PySide6.QtWidgets import QMainWindow, QWidget
 
 

@@ -318,9 +318,9 @@ def main():
     app = QApplication(sys.argv)
 
     from core import system_status
-    from core.dock_extension import DockExtensionWindow, CONTENT_MARGIN
-    from core.dock_constants import DockConstants
-    from core.extension_panel import ExtensionPanel
+    from core.dock.dock_extension import DockExtensionWindow, CONTENT_MARGIN
+    from core.dock.dock_constants import DockConstants
+    from core.dock.extension_panel import ExtensionPanel
     from core.system_status import SystemStatusWorker
 
     # ---------- 1. 组件与真实状态 ----------

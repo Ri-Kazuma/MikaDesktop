@@ -56,7 +56,7 @@ def main():
     app.setApplicationName("MikaDock-fullscreen-selftest")
 
     import core.sys32 as sys32
-    import dock as dock_module
+    import app as dock_module
 
     dock = None
     exit_code = 1

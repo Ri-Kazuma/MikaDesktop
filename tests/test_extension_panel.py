@@ -26,8 +26,8 @@ from PySide6.QtWidgets import QApplication
 app = QApplication.instance() or QApplication(sys.argv)
 
 from core import system_status
-from core.dock_constants import DockConstants
-from core.extension_panel import (
+from core.dock.dock_constants import DockConstants
+from core.dock.extension_panel import (
     ExtensionPanel,
     battery_icon_name,
     battery_tooltip,
