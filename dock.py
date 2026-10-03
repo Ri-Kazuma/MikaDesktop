@@ -7,8 +7,11 @@ import atexit
 from typing import Dict, List, Any
 import subprocess
 
+import win32api
 import win32con
+import win32event
 import win32gui
+import winerror
 from PySide6.QtCore import (QAbstractAnimation, QEasingCurve, QPropertyAnimation, Qt, QSize, QTimer, QEvent)
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton, QFileDialog, QVBoxLayout, QHBoxLayout,
@@ -1627,8 +1630,85 @@ class DockApp(QMainWindow):
         self._ensure_dock_visible()
 
 
+# ========== 单实例保护 ==========
+# 用命名互斥体确保同一时间只有一个 dock 进程。多个实例会各自注册 AppBar、各自
+# 隐藏/显示系统任务栏：隐藏与恢复交错执行，任务栏的最终状态不可预测（也正是
+# 「点了退出任务栏却没回来」的诱因）。这里直接拒绝第二个实例。
+#
+# 用会话内（Local）命名空间即可：dock 是每个登录会话各跑一个的桌面程序，不需要
+# 跨会话全局唯一；Global\ 命名空间反而可能因缺少 SeCreateGlobalPrivilege 而创建失败。
+_SINGLE_INSTANCE_MUTEX_NAME = "MikaDesktop_SingleInstance_Mutex"
+# 必须持有句柄直到进程结束，否则被 GC 回收 → 互斥体提前释放，保护失效
+_single_instance_mutex = None
+
+
+def _acquire_single_instance() -> bool:
+    """尝试成为唯一实例；若已有实例在运行则返回 False。
+
+    创建失败（例如环境异常）时一律返回 True 放行：宁可多开一个，也不要因为
+    单实例机制本身出问题而让程序无法启动。
+    """
+    global _single_instance_mutex
+    try:
+        handle = win32event.CreateMutex(None, False, _SINGLE_INSTANCE_MUTEX_NAME)
+    except Exception as e:
+        log.warning(f"创建单实例互斥体失败（{e}），跳过单实例检查")
+        return True
+
+    if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
+        # 已有实例：只需关掉这个多余的句柄，绝不能去动系统任务栏 ——
+        # 任务栏此刻是被那个正在运行的实例隐藏的，显示出来会把它顶掉。
+        try:
+            win32api.CloseHandle(handle)
+        except Exception:
+            pass
+        return False
+
+    _single_instance_mutex = handle
+    return True
+
+
+def _start_taskbar_watchdog():
+    """启动独立的任务栏看门狗进程，兜底「主进程被强杀」时任务栏无法恢复。
+
+    看门狗是独立进程：本进程被任务管理器「结束任务」强杀（``TerminateProcess``）后
+    它仍存活，会在主进程一消失时把系统任务栏显示回来。
+    """
+    try:
+        if getattr(sys, "frozen", False):
+            watchdog = os.path.join(os.path.dirname(sys.executable), "MikaWatchdog.exe")
+            if not os.path.exists(watchdog):
+                log.warning(f"未找到任务栏看门狗程序，跳过：{watchdog}")
+                return
+            args = [watchdog, str(os.getpid())]
+        else:
+            script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "taskbar_watchdog.py")
+            args = [sys.executable, script, str(os.getpid())]
+
+        # DETACHED_PROCESS：不要控制台窗口；CREATE_NEW_PROCESS_GROUP：让看门狗
+        # 脱离本进程的控制台/信号组，避免主进程退出时被一起带走。
+        DETACHED_PROCESS = 0x00000008
+        CREATE_NEW_PROCESS_GROUP = 0x00000200
+        subprocess.Popen(
+            args,
+            creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
+            close_fds=True,
+        )
+        log.info("任务栏看门狗已启动")
+    except Exception as e:
+        log.warning(f"启动任务栏看门狗失败：{e}")
+
+
 def main():
+    # 单实例检查必须放在隐藏任务栏之前：第二个实例若先隐藏了任务栏再退出，
+    # 会在退出时把它显示出来，反而破坏了正在运行的那个实例的界面。
+    if not _acquire_single_instance():
+        log.info("检测到已有 MikaDesktop 实例在运行，本次启动退出")
+        return
+
     sys32.hide_window(sys32.HWND_TRAY)
+    _start_taskbar_watchdog()
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)  # 防止关闭主窗口时退出应用
     app.setApplicationName("MikaDock")

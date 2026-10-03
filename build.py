@@ -42,6 +42,7 @@ INCLUDES = [
     "win32print",
     "winreg",
     "requests",
+    "charset_normalizer",
     "BlurWindow",
     "BlurWindow.blurWindow",
     "ctypes",
@@ -94,6 +95,10 @@ EXCLUDES = [
     "pdb",
     "distutils",
     "test",
+    # chardet 是被 requests 的可选导入拖进来的无关包：它自带的 mypyc 编译扩展
+    # （chardet/pipeline/orchestrator__mypyc.*.pyd）被冻结后一运行就会 0xc0000005
+    # 崩溃。requests 实际用的是 charset_normalizer，排除掉 chardet 即恢复正常。
+    "chardet",
 ]
 
 build_exe_options = {
@@ -116,7 +121,14 @@ executables = [
         base=base,
         target_name="MikaDesktop.exe",
         icon=str(ROOT_DIR / "core" / "make_app_icon" / "app_model.png"),
-    )
+    ),
+    # 任务栏看门狗：独立进程。主进程被任务管理器强杀时由它把系统任务栏恢复出来
+    # （见 taskbar_watchdog.py 与 dock.py 的 _start_taskbar_watchdog）。
+    Executable(
+        script=str(ROOT_DIR / "taskbar_watchdog.py"),
+        base=base,
+        target_name="MikaWatchdog.exe",
+    ),
 ]
 
 setup(
