@@ -23,7 +23,7 @@
 
 * 系统组件（桌面、任务栏、开始菜单、锁屏、UAC 提示、设置、任务管理器…）不会触发让位。
 * 判定与去抖逻辑见 `core/fullscreen_watch.py`，设计说明见 [docs/fullscreen_watch.md](docs/fullscreen_watch.md)。
-* 开关与例外名单在设置界面 **Dock** 页 →「全屏程序」，或直接改 `settings.json`：
+* 开关在设置界面 **Dock** 页 →「全屏程序」，或直接改 `settings.json`：
 
 ```json
 "fullscreen": {
@@ -31,8 +31,7 @@
   "poll_interval_ms": 400,
   "enter_confirm": 1,
   "exit_confirm": 2,
-  "tolerance": 2,
-  "except_processes": []
+  "tolerance": 2
 }
 ```
 
@@ -49,8 +48,9 @@
 * 显示方式仍是 `xht.notify_mode` 的三档（静默 / 只显示 🔔 / 展开），展开时可用
   `notify_actions`（按钮）、`notify_images`（图片）、`notify_click_activates`
   （点击内容同时激活应用）三个开关微调，设置界面在 **XHT** 页。
-* 点击 🔔（badge 模式）直接打开**系统通知中心**（多条通知堆在小黑条里逐条点开容易
-  乱），点击展开的内容才是「标记已读 / 可选激活应用」。
+* 点击 🔔 直接打开**系统通知中心**（多条通知堆在小黑条里逐条点开容易乱）：badge
+  档位整个是 🔔，expand 档位内容收起后退化成的 🔔N、以及展开内容里那个 🔔N 小链接，
+  点下去都是同一个行为。点击展开的内容才是「标记已读 / 可选激活应用」。
 * 内容元素解析在 `features/catch_notify/toast.py`，激活链路在
   `features/catch_notify/activation.py`，设计说明与限制见 [docs/toast_content.md](docs/toast_content.md)。
 

@@ -49,8 +49,11 @@ GUI 线程。
 
 未读与点击
 ----------
-* 点击 **🔔 图标**（badge 模式）：打开**系统通知中心**，然后清零未读 —— 多条通知
-  堆在小黑条里逐条点开容易乱，交给系统通知中心看更清楚。
+* 点击 **🔔 图标**：打开**系统通知中心**，然后清零未读 —— 多条通知堆在小黑条里逐条
+  点开容易乱，交给系统通知中心看更清楚。判定依据是「当前显示的是不是 🔔」，而不是
+  ``xht.notify_mode``：badge 档位整体就是 🔔；expand 档位在内容自动收起后也会退化成
+  ``🔔N``（见 :meth:`NotificationPresenter._on_expire`），展开内容里那行小号 ``🔔N``
+  同样做成了可点链接 —— 三种形态点下去行为一致。
 * 点击**展开的内容**（expand 模式）：按需把它当作"打开这条通知"发回应用，再清零
   （``mark_read()``）。
 
@@ -86,6 +89,7 @@ __all__ = [
     "DEFAULT_MODE",
     "DEFAULT_DURATION",
     "MAX_DURATION",
+    "CENTER_SCHEME",
     "format_unread",
     "NotificationBadge",
     "NotificationWatcher",
@@ -118,6 +122,8 @@ FONT_BODY = "font-size:14px;font-weight:400;"
 FONT_META = "font-size:13px;font-weight:400;color:#B8B8B8;"
 #: 按钮链接：用品牌色，和上面的文字区分开（配色见 杂物/1.md）
 FONT_ACTION = "font-size:13px;font-weight:700;color:#80E0D7;text-decoration:none;"
+#: 展开内容里那个 🔔N 未读计数：字号跟 meta 一致，颜色跟按钮一致（表示可点）
+FONT_META_LINK = "font-size:13px;font-weight:700;color:#80E0D7;text-decoration:none;"
 
 #: 图片尺寸上限（像素）：应用图标内联，横幅图等比缩放到这个框里
 APP_LOGO_MAX = 20
@@ -144,6 +150,10 @@ def _default_open_center() -> bool:
 
 #: 链接 href 前缀：按钮在 :attr:`ToastContent.button_actions` 里的下标
 ACTION_SCHEME = "xht-action:"
+
+#: 链接 href：展开内容里那个 🔔N 未读计数。点它 = 打开系统通知中心（含义与 badge
+#: 档位下点整个 🔔 一致，见模块文档「未读与点击」）。
+CENTER_SCHEME = "xht-center:"
 
 
 def _clip(text, limit: int = MAX_BODY_CHARS) -> str:
@@ -249,6 +259,8 @@ class NotificationBadge(QLabel):
     clicked = Signal()
     #: 用户点了第 N 个可点击按钮（下标对应 :attr:`ToastContent.button_actions`）
     actionTriggered = Signal(int)
+    #: 用户点了展开内容里的 🔔N 链接（= 打开系统通知中心）
+    centerRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -266,16 +278,25 @@ class NotificationBadge(QLabel):
         self.linkActivated.connect(self._on_link_activated)
         self._actions = ()
         self._link_fired = False
+        #: 当前显示的是不是「只有 🔔N」（而不是通知内容）。点击语义按它分流：
+        #: 显示 🔔 时点击 = 打开系统通知中心。只在 :meth:`show_badge` /
+        #: :meth:`show_content` / :meth:`clear` 里维护，不会和实际显示漂移。
+        self._badge_only = False
         self.setVisible(False)
 
     # -- 显示 -------------------------------------------------------------- #
     def show_badge(self, unread: int) -> None:
         """只显示 ``🔔`` / ``🔔N``。"""
         self._actions = ()
+        self._badge_only = True
         self.setTextFormat(Qt.TextFormat.PlainText)
         self.setText(format_unread(unread))
         self.setToolTip("点击打开通知中心")
         self.setVisible(True)
+
+    def is_badge_only(self) -> bool:
+        """当前显示的是不是「只有 🔔N」这种形态（而不是展开的通知内容）。"""
+        return bool(self._badge_only)
 
     def show_content(self, content, unread: int = 1, app_name: str = "",
                      package_family: str = "", feedback: str = "",
@@ -286,6 +307,7 @@ class NotificationBadge(QLabel):
         元素时传 ``None`` 也能工作，只是显示「（无可显示内容）」）。
         """
         content = content or _EMPTY_CONTENT
+        self._badge_only = False
         lines: list = []
 
         if show_images:
@@ -316,10 +338,9 @@ class NotificationBadge(QLabel):
                 lines.append('<span style="%s">%s</span>'
                              % (FONT_BODY, _escape_html(_clip(line))))
 
-        meta = self._meta_parts(content, unread, app_name, feedback)
+        meta = self._meta_html(content, unread, app_name, feedback)
         if meta:
-            lines.append('<span style="%s">%s</span>'
-                         % (FONT_META, _escape_html(" · ".join(meta))))
+            lines.append('<span style="%s">%s</span>' % (FONT_META, meta))
 
         self._actions = tuple(content.button_actions) if show_actions else ()
         if self._actions:
@@ -342,13 +363,11 @@ class NotificationBadge(QLabel):
         self.setVisible(True)
 
     @staticmethod
-    def _meta_parts(content, unread: int, app_name: str, feedback: str) -> list:
-        """小号弱化那一行的内容元素。"""
+    def _meta_parts(content, app_name: str, feedback: str) -> list:
+        """小号弱化那一行的内容元素（纯文本，未读计数不在这里，见 :meth:`_meta_html`）。"""
         parts: list = []
         if feedback:
             parts.append(str(feedback))
-        if unread > 1:
-            parts.append(format_unread(unread))
         header = content.header
         header_label = header.label if header is not None else ""
         # 场景标签和 header 标题经常是同一个词（都叫「提醒」），只留信息更多的那个
@@ -372,6 +391,21 @@ class NotificationBadge(QLabel):
             if part not in unique:
                 unique.append(part)
         return unique
+
+    def _meta_html(self, content, unread: int, app_name: str, feedback: str) -> str:
+        """小号那一行的 HTML：其余片段转义后拼接，未读计数 ``🔔N`` 做成可点链接。
+
+        未读计数必须做成**链接**而不是普通文字：整块 QLabel 的点击代表「打开这条
+        通知 / 标记已读」，点 🔔 的语义是「打开系统通知中心」，两者只能用链接区分
+        （``QLabel`` 上点链接会走 ``linkActivated``，不会再发 ``clicked``）。
+        """
+        parts = [_escape_html(part)
+                 for part in self._meta_parts(content, app_name, feedback)]
+        if unread > 1:
+            parts.append('<a href="%s" style="%s">%s</a>'
+                         % (CENTER_SCHEME, FONT_META_LINK,
+                            _escape_html(format_unread(unread))))
+        return " · ".join(parts)
 
     @staticmethod
     def _tooltip(content, unread: int, app_name: str, feedback: str) -> str:
@@ -414,12 +448,18 @@ class NotificationBadge(QLabel):
             parts.append("解析提示：%s" % message)
         if unread > 1:
             parts.append("未读 %d 条" % unread)
-        parts.append("点击标记为已读" + ("；点击按钮可把操作发回应用" if content.has_actions else ""))
+        hint = "点击标记为已读"
+        if content.has_actions:
+            hint += "；点击按钮可把操作发回应用"
+        if unread > 1:
+            hint += "；点 🔔N 打开通知中心"
+        parts.append(hint)
         return "\n".join(parts)
 
     def clear(self) -> None:
         self._actions = ()
         self._link_fired = False
+        self._badge_only = False
         self.setTextFormat(Qt.TextFormat.PlainText)
         self.setText("")
         self.setToolTip("点击标记为已读")
@@ -427,9 +467,13 @@ class NotificationBadge(QLabel):
 
     # -- 交互 -------------------------------------------------------------- #
     def _on_link_activated(self, href: str) -> None:
-        """富文本里的按钮被点击（href 是 ``xht-action:<下标>``）。"""
+        """富文本里的链接被点击（``xht-action:<下标>`` 或 ``xht-center:``）。"""
         self._link_fired = True
         text = str(href or "")
+        if text.startswith(CENTER_SCHEME):
+            # 点 🔔N 链接 = 打开系统通知中心；不当作「点内容」
+            self.centerRequested.emit()
+            return
         if not text.startswith(ACTION_SCHEME):
             return
         try:
@@ -646,6 +690,7 @@ class NotificationPresenter(QObject):
         self.watcher.failed.connect(self.on_failed)
         self.badge.clicked.connect(self.on_clicked)
         self.badge.actionTriggered.connect(self.on_action)
+        self.badge.centerRequested.connect(self.on_center_requested)
         self.activationFinished.connect(self.on_activation_finished)
 
         self.apply_config(config or {}, start=False)
@@ -764,19 +809,15 @@ class NotificationPresenter(QObject):
     def on_clicked(self) -> None:
         """点击 🔔 图标 / 展开的内容。
 
-        * ``badge`` 模式（点的是 🔔N）：打开**系统通知中心**，然后清零未读 ——
-          多条通知堆在小黑条里逐条点开容易乱，交给系统通知中心看更清楚。
-        * ``expand`` 模式（点的是内容）：按需把它当作「打开这条通知」发回应用，
-          再清零未读。
+        * 当前显示的是 **🔔**（badge 档位，或 expand 档位内容收起后退化成的 ``🔔N``）：
+          打开**系统通知中心**，然后清零未读 —— 多条通知堆在小黑条里逐条点开容易乱，
+          交给系统通知中心看更清楚。注意判定看的是「现在显示的是不是 🔔」，不是
+          ``notify_mode``：同一个小图标在两种档位下都得是同一个行为。
+        * 当前显示的是**展开的内容**：按需把它当作「打开这条通知」发回应用，再清零未读。
+          （内容里那个 ``🔔N`` 是链接，走 :meth:`on_center_requested`，不会落到这里。）
         """
-        if self.mode == MODE_BADGE:
-            ok = False
-            try:
-                ok = bool(self.open_center())
-            except Exception as exc:  # noqa: BLE001 - 打不开通知中心也不能影响清零
-                self.log.warning("打开通知中心失败：%s", exc)
-            self.log.info("点击 🔔：%s",
-                          "已打开系统通知中心" if ok else "系统通知中心打开失败")
+        if self._badge_showing():
+            self._open_notification_center(source="点击 🔔")
             self.mark_read()
             return
 
@@ -784,6 +825,35 @@ class NotificationPresenter(QObject):
         if self.click_activates and item is not None:
             self._start_activation(item, action=None, inputs=None, target="body")
         self.mark_read()
+
+    def on_center_requested(self) -> None:
+        """点了展开内容里的 ``🔔N`` 链接：和点 🔔 图标同一件事。"""
+        self._open_notification_center(source="点击 🔔N 链接")
+        self.mark_read()
+
+    def _badge_showing(self) -> bool:
+        """小图标当前是不是「只有 🔔N」的形态。
+
+        部件没提供这个能力时（测试替身等）退回按 ``notify_mode`` 判断。
+        """
+        checker = getattr(self.badge, "is_badge_only", None)
+        if callable(checker):
+            try:
+                return bool(checker())
+            except Exception as exc:  # noqa: BLE001 - 判定失败不该影响点击
+                self.log.debug("查询小图标形态失败：%s", exc)
+        return self.mode == MODE_BADGE
+
+    def _open_notification_center(self, source: str = "") -> bool:
+        """打开系统通知中心（best-effort），只记录结果不抛异常。"""
+        ok = False
+        try:
+            ok = bool(self.open_center())
+        except Exception as exc:  # noqa: BLE001 - 打不开通知中心也不能影响清零
+            self.log.warning("打开通知中心失败：%s", exc)
+        self.log.info("%s：%s", source or "打开通知中心",
+                      "已打开系统通知中心" if ok else "系统通知中心打开失败")
+        return ok
 
     def on_action(self, index: int) -> None:
         """点击了第 ``index`` 个按钮：收集输入 → 发回应用。"""

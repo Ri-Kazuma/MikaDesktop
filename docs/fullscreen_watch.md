@@ -47,11 +47,11 @@ dock 通过 AppBar 在屏幕底部保留了一块工作区（见 `core/sys32.py`
 
 * 内置名单 `SYSTEM_PROCESS_NAMES`：explorer / dwm / 登录锁屏 / 外壳（开始菜单、
   搜索、输入法）/ UAC `consent.exe` / 设置 / 任务管理器等，共 24 项。
-* 用户可用 `fullscreen.except_processes` 追加（每行一个进程名）。
 * **刻意不复用** `dock.except_processes`：那份列表语义是「不要在 dock 上显示」，
   里面既有 `applicationframehost.exe`（UWP 全屏窗口在系统里属于它），也有
   `python.exe`（本项目自己就是 python 跑的）。拿它判断全屏会误伤 UWP 全屏和
-  pygame 一类用 python 跑的全屏程序。
+  pygame 一类用 python 跑的全屏程序，所以判定只认上面这份内置名单，不再提供
+  用户可编辑的排除列表。
 
 ### 为什么是轮询而不是 `SetWinEventHook`
 
@@ -72,7 +72,7 @@ dock 通过 AppBar 在屏幕底部保留了一块工作区（见 `core/sys32.py`
 | 屏幕变化 | `_on_screen_changed()` | 让位期间**跳过** AppBar 重注册（否则把保留区塞回全屏窗口，让位当场失效），只刷新指标，等全屏结束再按新分辨率注册。 |
 | 安全恢复 | `_ensure_dock_visible()` | 让位期间不强行显示 dock。 |
 | 退出程序 | `exit_app()` / `atexit` | 先停监听线程再注销 AppBar，避免退出过程中又被信号动一次。 |
-| 设置界面 | `_apply_fullscreen_settings()` | 开关即时启停线程；排除名单即时下发。 |
+| 设置界面 | `_apply_fullscreen_settings()` | 开关即时启停线程。 |
 
 位置计算统一走 `_dock_target_y()`：读**启动时保存的**原始工作区底部
 （`_original_work_area_bottom`）减窗口高度。用保存值，反复注销/注册 AppBar 不会累
@@ -88,12 +88,11 @@ dock 通过 AppBar 在屏幕底部保留了一块工作区（见 `core/sys32.py`
   "poll_interval_ms": 400,
   "enter_confirm": 1,
   "exit_confirm": 2,
-  "tolerance": 2,
-  "except_processes": []
+  "tolerance": 2
 }
 ```
 
-设置界面 → **Dock** 页 →「全屏程序」可开关并维护不让位名单；`poll_interval_ms` /
+设置界面 → **Dock** 页 →「全屏程序」只有开关；`poll_interval_ms` /
 `enter_confirm` / `exit_confirm` / `tolerance` 是调参项，只在配置文件里手改。
 
 ## 已知边界与取舍

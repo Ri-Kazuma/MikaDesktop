@@ -1,9 +1,35 @@
-PySide6
-Pillow
-loguru
-psutil
-pywin32
-requests
-typing_extensions
-BlurWindow
-winsdk
+# MikaDesktop
+
+# ---- 界面 ----
+# Qt6；label.setText/Second 这类重载枚举 API 是 6.x 一路加进来的
+PySide6>=6.5
+# 主界面/设置窗口的亚克力背景（core/custom_ui.py、core/settings.py）
+BlurWindow>=1.2.1
+
+# ---- 系统与通知 ----
+# 进程查询与终止（core/process_manager.py、features/process_mgr.py）
+psutil>=5.9
+# 本项目大量使用 win32api/win32gui/win32com/pythoncom（见 build.py 的 HIDDEN_IMPORTS）
+pywin32>=306
+# 读取 Windows 通知（features/catch_notify/activation.py 的 UserNotificationListener）
+winsdk>=1.0.0b9
+# 音量读写与原生面板的 UIA 点击（core/system_status.py）。
+# 注意：它不会被上面任何一个包间接带进来（这些包的元数据里 requires 为空），
+# 必须显式声明；缺了只会静默降级成"音量未知"。
+# comtypes.client.GetModule() 在冻结环境里需要 PyInstaller>=6 且
+# pyinstaller-hooks-contrib>=2024.9，否则会 ModuleNotFoundError: comtypes.stream
+comtypes>=1.4.5
+
+# ---- 图像与图标 ----
+# 图标提取与状态图标合成（core/catch_ico.py、core/make_app_icon/overlay.py）。
+# 打包时 PyInstaller 也用它把 PNG 转 ICO（见 build.py 的 ICON_PATH）
+Pillow>=10.0
+
+# ---- 其它 ----
+# 日志（core/log_maker.py），.opt(depth=...) 需要 0.7
+loguru>=0.7
+# 设置界面的"检查更新"（core/settings.py）
+requests>=2.28
+# typer 式 Literal 兜底：Python < 3.8 才用得上，留着是为了在旧解释器上也能导入
+# （core/catch_ico.py 的 try/except ImportError）
+typing_extensions>=4.5

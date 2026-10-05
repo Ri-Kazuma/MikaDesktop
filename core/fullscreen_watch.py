@@ -30,14 +30,13 @@ dock；全屏解除 → 重新注册 AppBar 并显示 dock」。
    普通「最大化」窗口过不了这一条：dock 的 AppBar 已经抬高了工作区底边，
    最大化窗口的底边停在工具区底边附近，够不到显示器底边。
 4. 窗口类不是系统外壳窗口（桌面 Progman/WorkerW、任务栏、任务视图等）。
-5. 所属进程不是 Windows 自身组件（见 :data:`SYSTEM_PROCESS_NAMES`），也不在
-   用户的额外排除列表 ``fullscreen.except_processes`` 里。
+5. 所属进程不是 Windows 自身组件（见 :data:`SYSTEM_PROCESS_NAMES`）。
 
 这里**刻意不复用** ``dock.except_processes``：那份列表的语义是「不要在 dock 上
 显示这个程序」，里面既有 ``applicationframehost.exe``（UWP 应用的全屏窗口在
 系统里属于它），也有 ``python.exe``（本项目自己就是 python 跑起来的）。拿它来
-判断全屏会误伤 UWP 全屏和 pygame 一类的 python 全屏程序，所以全屏判定有自己
-独立的排除列表。
+判断全屏会误伤 UWP 全屏和 pygame 一类的 python 全屏程序，所以判定只认
+:data:`SYSTEM_PROCESS_NAMES` 这一份内置名单，不提供用户可编辑的排除列表。
 """
 
 from __future__ import annotations
@@ -240,7 +239,7 @@ class WindowSnapshot:
 
 
 def select_fullscreen_window(snapshots, *, tolerance: int = DEFAULT_TOLERANCE,
-                             extra_processes=(), ignored_hwnds=(),
+                             ignored_hwnds=(),
                              own_process_name: str = ""):
     """从快照里挑出「正在全屏显示的非系统窗口」；没有则返回 ``None``。
 
@@ -248,7 +247,6 @@ def select_fullscreen_window(snapshots, *, tolerance: int = DEFAULT_TOLERANCE,
     判定过程中用到的每个条件都在模块文档里有说明；这里的顺序是「先便宜后昂贵」。
     """
     ignored = {int(h) for h in (ignored_hwnds or ()) if h}
-    extra = {normalize_process_name(p) for p in (extra_processes or ()) if p}
     own = normalize_process_name(own_process_name)
 
     for snapshot in snapshots or ():
@@ -269,8 +267,6 @@ def select_fullscreen_window(snapshots, *, tolerance: int = DEFAULT_TOLERANCE,
             os.path.basename(str(snapshot.exe_path or ""))
         )
         if own and name == own:
-            continue
-        if name and name in extra:
             continue
         if not covers_monitor(snapshot.rect, snapshot.monitor_rect, tolerance):
             continue
@@ -377,7 +373,6 @@ class FullscreenWatcherWorker(QThread):
                  enter_confirm: int = DEFAULT_ENTER_CONFIRM,
                  exit_confirm: int = DEFAULT_EXIT_CONFIRM,
                  tolerance: int = DEFAULT_TOLERANCE,
-                 extra_processes=(),
                  own_process_name: str = "",
                  candidate_provider=None,
                  parent=None):
@@ -387,7 +382,6 @@ class FullscreenWatcherWorker(QThread):
         self._enter_confirm = max(int(enter_confirm), 1)
         self._exit_confirm = max(int(exit_confirm), 1)
         self._tolerance = max(int(tolerance), 0)
-        self._extra_processes = tuple(extra_processes or ())
         self._own_process_name = own_process_name or ""
         # 候选来源可注入：单测无需真实桌面即可驱动整个状态机
         self._candidate_provider = candidate_provider or collect_candidates
@@ -407,11 +401,6 @@ class FullscreenWatcherWorker(QThread):
         """设置要忽略的窗口句柄（dock 自己的窗口、XHT 窗口等）。"""
         with self._lock:
             self._ignored_hwnds = {int(h) for h in (hwnds or ()) if h}
-
-    def set_extra_processes(self, processes) -> None:
-        """更新额外的排除进程（用户配置 ``fullscreen.except_processes``）。"""
-        with self._lock:
-            self._extra_processes = tuple(processes or ())
 
     def is_fullscreen(self) -> bool:
         """当前（去抖后）的全屏状态。"""
@@ -445,7 +434,6 @@ class FullscreenWatcherWorker(QThread):
         """
         with self._lock:
             ignored = set(self._ignored_hwnds)
-            extra = tuple(self._extra_processes)
             tolerance = self._tolerance
             own = self._own_process_name
 
@@ -453,7 +441,6 @@ class FullscreenWatcherWorker(QThread):
         snapshot = select_fullscreen_window(
             snapshots,
             tolerance=tolerance,
-            extra_processes=extra,
             ignored_hwnds=ignored,
             own_process_name=own,
         )

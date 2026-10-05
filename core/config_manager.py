@@ -33,9 +33,6 @@ DEFAULT_CONFIG = {
     "enter_confirm": 1,        # 连续命中几轮才判定为"进入全屏"
     "exit_confirm": 2,         # 连续未命中几轮才判定为"退出全屏"（抗 Alt+Tab 抖动）
     "tolerance": 2,            # 覆盖显示器的判定容差（像素）
-    # 额外排除：这些程序全屏时不让 dock 让位（判定用的排除列表与 dock.except_processes
-    # 是两份独立的列表，理由见 core/fullscreen_watch.py 模块文档）
-    "except_processes": []
   },
   "xht":{
       "edge_height": 4,

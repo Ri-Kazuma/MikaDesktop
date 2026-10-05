@@ -115,12 +115,11 @@ check("副屏全屏按副屏显示器判定 → 命中",
       select_fullscreen_window([snap(rect=MON2, monitor_rect=MON2)]) is not None)
 check("在副屏全屏、但前台在另一个屏幕 → 不命中",
       select_fullscreen_window([snap(rect=MON2, monitor_rect=MON2, foreground=False)]) is None)
-check("用户额外排除的程序 → 不命中",
-      select_fullscreen_window([snap(process_name="OBS64.exe")],
-                               extra_processes=["obs64"]) is None)
 check("本程序自己（打包后）→ 不命中",
       select_fullscreen_window([snap(process_name="MikaDock.exe")],
                                own_process_name="MikaDock.exe") is None)
+check("判定接口不再接受用户排除列表",
+      "extra_processes" not in select_fullscreen_window.__code__.co_varnames)
 check("候选里有多个时取第一个命中的",
       select_fullscreen_window([snap(hwnd=1, rect=(0, 0, 10, 10)), snap(hwnd=2)]).hwnd == 2)
 check("快照列表为空 → 不命中", select_fullscreen_window([]) is None)
@@ -203,9 +202,11 @@ worker4.set_ignored_hwnds([777])
 worker4.poll_once()
 check("ignore 列表里的窗口不会被判定为全屏", rec4.events == [], rec4.events)
 worker4.set_ignored_hwnds([])
-worker4.set_extra_processes(["game"])
 worker4.poll_once()
-check("额外排除列表在运行期生效", rec4.events == [], rec4.events)
+check("清空 ignore 列表后恢复判定",
+      rec4.events == [(True, "game.exe（某游戏）")], rec4.events)
+check("监听线程不再提供排除列表接口",
+      not hasattr(worker4, "set_extra_processes"))
 
 # ---------------------------------------------------------------- 5) 监听线程
 state = {"full": True}
@@ -251,10 +252,11 @@ import app as dock_module
 fs_default = Config.DEFAULT_CONFIG.get("fullscreen", {})
 check("默认配置包含 fullscreen 段", isinstance(fs_default, dict) and bool(fs_default))
 check("默认开启全屏让位", fs_default.get("enabled") is True)
-check("默认排除列表为空（不影响判定）", fs_default.get("except_processes") == [])
 for key in ("enabled", "poll_interval_ms", "enter_confirm", "exit_confirm",
-            "tolerance", "except_processes"):
+            "tolerance"):
     check(f"默认配置包含 {key}", key in fs_default)
+check("默认配置不再有用户排除列表",
+      "except_processes" not in fs_default, sorted(fs_default))
 
 check("DockApp 提供进入/退出让位方法",
       callable(getattr(dock_module.DockApp, "enter_fullscreen_suppression", None))
@@ -426,32 +428,27 @@ try:
     # 设置界面往返：读得到、改得回
     ui = settings_module.SettingsUI(version="test", config_path=cfg_path)
     check("设置界面读到的默认状态是开启", ui.fullscreen_enabled.isChecked() is True)
-    check("设置界面默认排除列表为空", ui.fullscreen_except.toPlainText().strip() == "")
+    check("设置界面不再有排除列表输入框", not hasattr(ui, "fullscreen_except"))
 
     ui.fullscreen_enabled.setChecked(False)
-    check("关掉开关会把排除列表置灰", ui.fullscreen_except.isEnabled() is False)
-    ui.fullscreen_enabled.setChecked(True)
-    check("重新打开开关会恢复排除列表", ui.fullscreen_except.isEnabled() is True)
-
-    ui.fullscreen_except.setPlainText("obs64.exe\n\n  msedge  \n")
     ui.collect_settings()
     collected = ui.config_data.get("fullscreen", {})
-    check("设置界面写回 enabled", collected.get("enabled") is True)
-    check("设置界面写回排除列表（去空行与空白）",
-          collected.get("except_processes") == ["obs64.exe", "msedge"],
-          collected.get("except_processes"))
+    check("设置界面写回 enabled", collected.get("enabled") is False, collected.get("enabled"))
     check("设置界面不会丢掉未接管的调参项",
           collected.get("poll_interval_ms") == 400
           and collected.get("tolerance") == 2, collected)
+    check("设置界面不再写回排除列表",
+          "except_processes" not in collected, collected)
 
-    # 再读一次：排除列表里的值要能正确回填（带 .exe 与不带扩展名都原样保留）
+    # 老配置文件里残留下来的排除列表也不该再被写回
     reloaded = Config.load_config(cfg_path)
     reloaded["fullscreen"]["except_processes"] = ["obs64.exe", "msedge"]
     Config.save_config(cfg_path, reloaded)
     ui2 = settings_module.SettingsUI(version="test", config_path=cfg_path)
-    check("排除列表能回填到设置界面",
-          ui2.fullscreen_except.toPlainText().split("\n") == ["obs64.exe", "msedge"],
-          ui2.fullscreen_except.toPlainText())
+    ui2.collect_settings()
+    check("存量配置里的排除列表不会回到界面/配置",
+          "except_processes" not in ui2.config_data.get("fullscreen", {}),
+          ui2.config_data.get("fullscreen"))
 finally:
     shutil.rmtree(tmp_dir, ignore_errors=True)
 

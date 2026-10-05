@@ -108,19 +108,6 @@ class SettingsUI(QDialog):
         self.fullscreen_tips_label.setWordWrap(True)
         self.fullscreen_layout.addWidget(self.fullscreen_tips_label)
 
-        self.fullscreen_except_label = QLabel(self.fullscreen_group)
-        self.fullscreen_layout.addWidget(self.fullscreen_except_label)
-
-        self.fullscreen_except = QPlainTextEdit(self.fullscreen_group)
-        self.fullscreen_except.setStyleSheet(u"background: #F8F9FA")
-        self.fullscreen_except.setDocumentTitle(u"")
-        self.fullscreen_except.setPlaceholderText(u"例如：obs64.exe\\nmsedge.exe")
-        self.fullscreen_layout.addWidget(self.fullscreen_except)
-
-        self.fullscreen_spacer = QSpacerItem(20, 20, QSizePolicy.Policy.Minimum,
-                                             QSizePolicy.Policy.Minimum)
-        self.fullscreen_layout.addItem(self.fullscreen_spacer)
-
         self.verticalLayout_7.addWidget(self.fullscreen_group)
 
         #self.verticalLayout_2.addWidget(self.except_apps)
@@ -256,14 +243,11 @@ class SettingsUI(QDialog):
         self.except_apps_tips_label.setText(u"键入进程名（每行一个，无需.exe后缀）")
         self.fullscreen_group.setTitle(u"全屏程序")
         self.fullscreen_enabled.setText(u"程序全屏时隐藏 Dock 并注销 AppBar")
-        self.fullscreen_except_label.setText(u"不让位的程序（每行一个，无需.exe后缀）")
         self.fullscreen_tips_label.setText(
             u"非系统程序全屏显示（铺满整个显示器，不是最大化）时，解除屏幕底部的"
             u"工作区保留并隐藏 Dock，让全屏画面完整占满屏幕；全屏结束或切到别的"
             u"窗口后自动恢复。\n"
-            u"系统组件（桌面、任务栏、开始菜单、锁屏、UAC 提示等）不会触发让位。\n"
-            u"下面的列表留空即可；只有希望某些程序全屏时仍然保留 Dock 时才需要填写"
-            u"（与上面「排除的应用」是两份独立的列表）。")
+            u"系统组件（桌面、任务栏、开始菜单、锁屏、UAC 提示等）不会触发让位。")
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.dock), u"Dock")
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.xht), u"XHT")
         self.windowpos_label.setText(u"启动时位置")
@@ -285,12 +269,13 @@ class SettingsUI(QDialog):
             u"应用图标与横幅图，以及可点击的通知按钮。\n"
             u"通知按钮：点击后把按钮的 arguments（以及你填写的输入内容）通过应用注册的"
             u"COM 激活器发回去，和点系统通知一样；应用没注册激活器时会退回「打开该应用」。\n"
-            u"显示时间 0 秒 = 不自动收起，一直显示到点击；点击图标或内容即清零未读。")
+            u"显示时间 0 秒 = 不自动收起，一直显示到点击；点击 🔔 会打开系统通知中心并"
+            u"清零未读（展开内容里那个 🔔N 也一样），点击展开的内容则是「标记已读」，"
+            u"勾选上面的「点击通知内容时同时激活应用」后还会把该通知发回应用。")
         self._notify_modes, notify_labels = self._notify_mode_choices()
         for notify_mode in self._notify_modes:
             self.notify_mode.addItem(notify_labels.get(notify_mode, notify_mode))
         self.notify_enabled.toggled.connect(self._sync_notify_widgets)
-        self.fullscreen_enabled.toggled.connect(self._sync_fullscreen_widgets)
         self.about_text.setText(ABOUT_TEXT)
         self.check_upd_button.setText(u"检查更新")
         self.check_upd_button.clicked.connect(self.check_update)
@@ -340,11 +325,6 @@ class SettingsUI(QDialog):
         self.notify_images.setEnabled(bool(enabled))
         self.notify_click_activates.setEnabled(bool(enabled))
 
-    def _sync_fullscreen_widgets(self, enabled: bool):
-        """关掉全屏让位时，把排除列表一起置灰。"""
-        self.fullscreen_except.setEnabled(bool(enabled))
-        self.fullscreen_except_label.setEnabled(bool(enabled))
-
     def load_settings_to_ui(self):
         debug_enabled = self.config_data.get('debug', False)
         self.enable_debug.setChecked(debug_enabled)
@@ -383,10 +363,6 @@ class SettingsUI(QDialog):
         # 全屏程序让位
         fs_config = self.config_data.get('fullscreen', {}) or {}
         self.fullscreen_enabled.setChecked(bool(fs_config.get('enabled', True)))
-        self.fullscreen_except.setPlainText(
-            '\n'.join(fs_config.get('except_processes', []) or [])
-        )
-        self._sync_fullscreen_widgets(self.fullscreen_enabled.isChecked())
 
         self.check_autostart_status()
 
@@ -446,14 +422,12 @@ class SettingsUI(QDialog):
         self.config_data['debug'] = self.enable_debug.isChecked()
         self.config_data['dock'] = dock_config
 
-        # 全屏程序让位：只覆盖界面管理的两个字段，poll_interval_ms 之类的调参项
-        # 保持在配置文件里手改的值
+        # 全屏程序让位：界面只管理开关，poll_interval_ms 之类的调参项保持在
+        # 配置文件里手改的值
         fs_config = self.config_data.get('fullscreen', {}) or {}
         fs_config['enabled'] = self.fullscreen_enabled.isChecked()
-        fs_config['except_processes'] = [
-            line.strip() for line in self.fullscreen_except.toPlainText().split('\n')
-            if line.strip()
-        ]
+        # 已删掉的「不让位的程序」排除列表：老配置里残留的键顺手清掉，别再写回去
+        fs_config.pop('except_processes', None)
         self.config_data['fullscreen'] = fs_config
 
         # XHT：启动位置 + 通知提示

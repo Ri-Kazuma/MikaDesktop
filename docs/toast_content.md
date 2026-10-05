@@ -78,11 +78,14 @@ XML 来自第三方应用，标签没闭合、属性没引号、混着 CDATA 都
   点其它地方发 `clicked`。PySide6 没绑定 `QLabel::anchorAt`，故利用
   「`super().mouseReleaseEvent()` 会同步触发 `linkActivated`」区分两类点击：先跑
   父类实现，链接被点过就只派发动作，否则派发 `clicked`。
-* **点 🔔（badge 模式）打开系统通知中心**：多条通知堆在小黑条里逐条点开容易乱，
-  所以 `NotificationPresenter.on_clicked()` 在 badge 模式下调用
-  `open_center()`（默认 `core.system_status.open_notification_center()`，可注入）
-  打开系统的通知中心／操作中心，然后清零未读；expand 模式下点内容才是「标记已读
-  （可选激活应用）」。
+* **点 🔔 打开系统通知中心**：多条通知堆在小黑条里逐条点开容易乱，所以
+  `NotificationPresenter.on_clicked()` 只要发现当前显示的是 🔔（
+  `NotificationBadge.is_badge_only()`）就调用 `open_center()`（默认
+  `core.system_status.open_notification_center()`，可注入）打开系统的通知中心／
+  操作中心，然后清零未读。判定**不按 `notify_mode`**：expand 档位在内容自动收起后
+  也会退化成 `🔔N`，展开内容里那个 `🔔N` 计数则渲染成 `<a href="xht-center:">` 链接
+  （点它发 `centerRequested` → `on_center_requested()`），三种形态行为一致。
+  点展开的内容才是「标记已读（可选激活应用）」。
 * **上下文菜单按钮不占版面**，只出现在 tooltip；场景标签与 header 标题重复时
   （都叫「提醒」）弱化行会去重。
 * 激活结果（`✓ 已发送「回复」` / `⚠ …`）在小黑条停留 3 秒（`FEEDBACK_MS`）后收起。

@@ -630,7 +630,7 @@ def test_display():
     from PySide6.QtGui import QImage
 
     from features.XHT.Lib.Notify import (
-        ACTION_SCHEME, NotificationBadge, NotificationPresenter, image_html,
+        ACTION_SCHEME, CENTER_SCHEME, NotificationBadge, NotificationPresenter, image_html,
     )
     from features.catch_notify.records import Notification, extract_texts
 
@@ -843,6 +843,49 @@ def test_display():
     presenter.on_clicked()
     pump(app, 0.5)
     check("展开模式点内容不打开通知中心", opened == [], opened)
+
+    # 展开模式：内容自动收起后退化成 🔔N —— 显示的同样是 🔔，点它必须开通知中心
+    opened.clear()
+    dispatched.clear()
+    presenter.apply_config({"notify_enabled": True, "notify_mode": "expand",
+                            "notify_click_activates": True}, start=False)
+    presenter.on_notification(item)
+    presenter.on_notification(item)
+    presenter._on_expire()          # 显示时间到：内容收起，未读还在 → 退化成 🔔N
+    check("展开模式收起后退化成 🔔N",
+          badge2.is_badge_only() and "🔔" in badge2.text(), badge2.text())
+    presenter.on_clicked()
+    pump(app, 0.5)
+    check("点退化出来的 🔔N → 打开通知中心", opened == [True], opened)
+    check("点退化出来的 🔔N → 不激活应用", dispatched == [], dispatched)
+    check("点退化出来的 🔔N → 清零未读", presenter.unread == 0, presenter.unread)
+
+    # 展开内容里那行小号 🔔N 是链接：点它同理，而不是「打开这条通知」
+    opened.clear()
+    dispatched.clear()
+    presenter.on_notification(item)
+    presenter.on_notification(item)
+    check("展开内容里带可点的 🔔N 链接",
+          CENTER_SCHEME in badge2.text() and "🔔2" in badge2.text(), badge2.text()[:120])
+    badge2.linkActivated.emit(CENTER_SCHEME)
+    pump(app, 0.5)
+    check("点内容里的 🔔N 链接 → 打开通知中心", opened == [True], opened)
+    check("点内容里的 🔔N 链接 → 不激活应用", dispatched == [], dispatched)
+    check("点内容里的 🔔N 链接 → 清零未读", presenter.unread == 0, presenter.unread)
+
+    # 退化形态之后又来新通知 → 重新展开内容，此时点内容不能再被当成「点 🔔」
+    opened.clear()
+    presenter.apply_config({"notify_enabled": True, "notify_mode": "expand",
+                            "notify_click_activates": False}, start=False)
+    presenter.on_notification(item)
+    presenter._on_expire()              # 先退化成 🔔N
+    presenter.on_notification(item)     # 新通知 → 又展开内容
+    check("新通知到来后重新展开内容",
+          not badge2.is_badge_only() and "小明的消息" in badge2.text(),
+          badge2.text()[:60])
+    presenter.on_clicked()
+    pump(app, 0.5)
+    check("重新展开后点内容不开通知中心", opened == [], opened)
 
     # 静默模式不动外观；未读仍累计
     presenter.apply_config({"notify_enabled": True, "notify_mode": "silent"}, start=False)

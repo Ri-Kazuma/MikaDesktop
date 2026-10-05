@@ -33,6 +33,7 @@ from core.process_scan import ProcessScanWorker
 from core import pinned_apps
 import core.sys32 as sys32
 import core.log_maker as log_maker
+from core.qt_log_filter import install_qt_log_filter
 import core.config_manager as Config
 import core.settings as settings
 from features.XHT.Lib import XHTWindow
@@ -526,7 +527,6 @@ class DockApp(QMainWindow):
                 exit_confirm=_config_int(fs_config.get('exit_confirm'),
                                          DEFAULT_EXIT_CONFIRM, 1),
                 tolerance=_config_int(fs_config.get('tolerance'), DEFAULT_TOLERANCE, 0),
-                extra_processes=fs_config.get('except_processes') or (),
                 # 打包后 sys.executable 就是本程序；源码运行时它是 python.exe，
                 # 这时不能按进程名排除自己，否则 pygame 之类用 python 跑的全屏
                 # 程序会被一起放过（dock 自己的窗口另有 hwnd 兜底）。
@@ -1414,24 +1414,22 @@ class DockApp(QMainWindow):
             except Exception as e:
                 log.warning(f"刷新 XHT 配置失败: {e}")
 
-        # 全屏让位设置同样即时生效（开关会启停监听线程，排除列表直接更新）
+        # 全屏让位开关同样即时生效（启停监听线程）
         self._apply_fullscreen_settings(config_data.get('fullscreen') or {})
 
         log.info("设置已更新")
 
     def _apply_fullscreen_settings(self, fs_config):
-        """把设置界面里的全屏让位配置应用到运行中的监听线程。"""
-        enabled = bool(fs_config.get('enabled', True))
-        if enabled and getattr(self, '_fs_worker', None) is None:
-            self._start_fullscreen_watch()
-        elif not enabled and getattr(self, '_fs_worker', None) is not None:
-            self._stop_fullscreen_watch()
+        """把设置界面里的全屏让位开关应用到运行中的监听线程。
+
+        界面只有 ``enabled`` 可改；``poll_interval_ms`` 一类调参项在启动监听时读
+        一次（见 :meth:`_start_fullscreen_watch`），改了要重启程序才生效。
+        """
+        if bool(fs_config.get('enabled', True)):
+            if getattr(self, '_fs_worker', None) is None:
+                self._start_fullscreen_watch()
         elif getattr(self, '_fs_worker', None) is not None:
-            try:
-                self._fs_worker.set_extra_processes(fs_config.get('except_processes') or ())
-                log.info("全屏让位排除列表已刷新")
-            except Exception as e:
-                log.warning(f"刷新全屏让位排除列表失败: {e}")
+            self._stop_fullscreen_watch()
 
     def load_settings(self):
         try:
@@ -1701,6 +1699,11 @@ def _start_taskbar_watchdog():
 
 
 def main():
+    # 必须赶在 QApplication 之前：平台插件初始化时就会枚举屏幕，睡眠/唤醒后刷出
+    # 的 "Unable to open monitor interface to \\.\DISPLAY1" 就来自那一刻（见
+    # core/qt_log_filter.py 的说明）。
+    install_qt_log_filter()
+
     # 单实例检查必须放在隐藏任务栏之前：第二个实例若先隐藏了任务栏再退出，
     # 会在退出时把它显示出来，反而破坏了正在运行的那个实例的界面。
     if not _acquire_single_instance():
